@@ -1,6 +1,9 @@
 
-CXXFLAGS=-g `sdl-config --cflags` -fPIC -std=c++11 -pthread -I/usr/include/bullet -Wall -Wextra -Wpedantic -Wno-sign-compare `pkg-config --cflags --libs python2` -fdiagnostics-color
-LIBS=`sdl-config --libs` -lSDL_mixer -lGL -lGLU -lpng -lSDL -lBulletDynamics -lBulletCollision -lLinearMath
+CXXFLAGS=-g  -fPIC -std=c++14 -pthread  -Wall -Wextra -Wpedantic -Wno-sign-compare  -fdiagnostics-color
+CXXFLAGS+=`pkg-config --cflags --libs python2`
+CXXFLAGS+=`sdl-config --cflags`
+CXXFLAGS+=-I/usr/include/bullet
+LIBS=`sdl-config --libs` `pkg-config --libs python2` -lSDL_mixer -lGL -lGLU -lpng -lSDL -lBulletDynamics -lBulletCollision -lLinearMath
 CXX=g++
 
 all: _simulation.so
