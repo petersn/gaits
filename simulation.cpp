@@ -68,3 +68,31 @@ StaticPlane::StaticPlane(PhysicsWorld* parent, Vec* normal, float constant) {
 	parent->objects.push_back(this);
 }
 
+
+/*
+btSliderConstraint* bt_constraint =
+    new btSliderConstraint(
+        *ref_bodyA,
+        fromB,true);
+
+bt_constraint->setLowerLinLimit(-10.0f);
+bt_constraint->setUpperLinLimit(10.0f);
+
+bt_constraint->setLowerAngLimit(0.0f);
+bt_constraint->setUpperAngLimit(0.0f);
+*/
+
+void PhysicsWorld::add_constraint(PhysicsObject* obj1, PhysicsObject* obj2) {
+	btTransform t1, t2;
+	t1.setRotation(btQuaternion::getIdentity());
+	t2.setRotation(btQuaternion::getIdentity());
+	t1.setOrigin({0, -1.5, 0});
+	t2.setOrigin({0, 1.5, 0});
+	btGeneric6DofSpringConstraint* spring = new btGeneric6DofSpringConstraint(
+		*obj1->rigidBody, *obj2->rigidBody,
+		t1, t2,
+		true
+	);
+	dynamicsWorld->addConstraint(spring);
+}
+

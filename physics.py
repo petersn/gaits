@@ -196,7 +196,7 @@ if __name__ == "__main__":
 	world.add_box(Box(
 		extents=[1, 1, 1],
 		state=State(
-			position=[0, 10, 0],
+			position=[0, 6, 0],
 		),
 		mass=1,
 	))
@@ -207,6 +207,7 @@ if __name__ == "__main__":
 		),
 		mass=1,
 	))
+	world.physics_world_pointer.add_constraint(world.boxes[0].pointer, world.boxes[1].pointer)
 
 	traj = Trajectory(world)
 	traj.save_snapshot()
