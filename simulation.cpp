@@ -15,12 +15,29 @@ void PhysicsWorld::step(float dt, int substeps) {
 	dynamicsWorld->stepSimulation(dt, substeps);
 }
 
+void PhysicsObject::set_data(ObjectState* state) {
+	btTransform trans;
+	trans.setOrigin(state->xyz.as_btVector3());
+	trans.setRotation(state->quat.as_btQuaternion());
+	motionState->setWorldTransform(trans);
+	rigidBody->setLinearVelocity(state->vel.as_btVector3());
+	rigidBody->setAngularVelocity(state->avel.as_btVector3());
+	// Wake up the object, in case it fell asleep from inactivity.
+	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
+}
+
 void PhysicsObject::get_data(ObjectState* state_out) {
 	btTransform trans;
 	motionState->getWorldTransform(trans);
 	state_out->xyz.from_btVector3(trans.getOrigin());
 	state_out->vel.from_btVector3(rigidBody->getLinearVelocity());
 	state_out->quat.from_btQuaternion(trans.getRotation());
+	state_out->avel.from_btVector3(rigidBody->getAngularVelocity());
+}
+
+void PhysicsObject::apply_force(Vec* force, Vec* world_space_offset) {
+	rigidBody->applyForce(force->as_btVector3(), world_space_offset->as_btVector3());
+	rigidBody->btCollisionObject::setActivationState(ACTIVE_TAG);
 }
 
 Box::Box(PhysicsWorld* parent, Vec* dimensions, ObjectState* state, float mass) {

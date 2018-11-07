@@ -34,6 +34,7 @@ struct ObjectState {
 	Vec xyz{0, 0, 0};
 	Vec vel{0, 0, 0};
 	Vec quat{0, 0, 0, 1};
+	Vec avel{0, 0, 0};
 };
 
 struct PhysicsObject;
@@ -56,7 +57,9 @@ struct PhysicsObject {
 	btDefaultMotionState* motionState;
 	btRigidBody* rigidBody;
 
+	void set_data(ObjectState* state);
 	void get_data(ObjectState* state_out);
+	void apply_force(Vec* force, Vec* world_space_offset);
 };
 
 struct Box : public PhysicsObject {
