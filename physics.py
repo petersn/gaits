@@ -6,9 +6,25 @@ Provides a wrapper around simulation.py (which is the SWIG wrapper for _simulati
 Includes facilities for serializing/deserializing the world state, for rendering in Blender.
 """
 
+from __future__ import print_function
 import numpy as np
 import json
-import simulation
+try:
+	import simulation
+except ImportError as e:
+	class Dump: pass
+	thing = Dump()
+	class simulation:
+		class DoNothing:
+			def __init__(self, *args, **kwargs):
+				pass
+		class PhysicsWorld(DoNothing): pass
+		class Box(DoNothing):
+			def set_data(self, x): pass
+		class StaticPlane(DoNothing): pass
+		class Vec(DoNothing): pass
+		class ObjectState(DoNothing):
+			xyz = vel = quat = avel = thing
 
 origin = np.array([0.0, 0.0, 0.0])
 identity_quat = np.array([0.0, 0.0, 0.0, 1.0])
@@ -41,6 +57,11 @@ class State:
 		self.rotation = np.array([state.quat.x, state.quat.y, state.quat.z, state.quat.w])
 		self.angular_velocity = np.array([state.avel.x, state.avel.y, state.avel.z])
 
+class Plane:
+	def __init__(self, normal, constant):
+		self.normal = normal
+		self.constant = constant
+
 class Box:
 	def __init__(self, extents, state, mass):
 		self.extents = extents
@@ -58,17 +79,19 @@ class Box:
 class World:
 	def __init__(self):
 		self.physics_world_pointer = simulation.PhysicsWorld()
+		self.planes = []
 		self.boxes = []
 
 	def step(self, dt, substeps):
 		self.physics_world_pointer.step(dt, substeps)
 
-	def add_plane(self, normal, constant):
-		simulation.StaticPlane(
+	def add_plane(self, plane):
+		plane.pointer = simulation.StaticPlane(
 			self.physics_world_pointer,
-			simulation.Vec(*normal),
-			constant,
+			simulation.Vec(*plane.normal),
+			plane.constant,
 		)
+		self.planes.append(plane)
 
 	def add_box(self, box):
 		box.pointer = simulation.Box(
@@ -78,6 +101,34 @@ class World:
 			box.mass,
 		)
 		self.boxes.append(box)
+
+	def serialize_setup(self):
+		return {
+			"planes": [
+				{"normal": plane.normal, "constant": plane.constant}
+				for plane in self.planes
+			],
+			"boxes": [
+				{
+					"extents": box.extents,
+					"mass": box.mass,
+				}
+				for box in self.boxes
+			],
+		}
+
+	@staticmethod
+	def from_serialized_setup(setup):
+		world = World()
+		for plane in setup["planes"]:
+			world.add_plane(Plane(plane["normal"], plane["constant"]))
+		for box in setup["boxes"]:
+			world.add_box(Box(
+				extents=box["extents"],
+				state=State(),
+				mass=box["mass"],
+			))
+		return world
 
 	def sync_from_cpp(self):
 		for box in self.boxes:
@@ -117,9 +168,31 @@ class World:
 		box.state.rotation = np.array(box_state_snapshot["quat"])
 		box.state.angular_velocity = np.array(box_state_snapshot["avel"])
 
+class Trajectory:
+	def __init__(self, world):
+		self.world = world
+		self.data = {
+			"setup": world.serialize_setup(),
+			"snapshots": [],
+		}
+
+	def save_snapshot(self):
+		self.data["snapshots"].append(self.world.snapshot())
+
+	def step(self, dt, substeps):
+		self.world.step(dt, substeps)
+		self.save_snapshot()
+
+	@staticmethod
+	def from_json(desc):
+		world = World.from_serialized_setup(desc["setup"])
+		traj = Trajectory(world)
+		traj.data["snapshots"] = desc["snapshots"]
+		return traj
+
 if __name__ == "__main__":
 	world = World()
-	world.add_plane([0, 1, 0], 0)
+	world.add_plane(Plane([0, 1, 0], 0))
 	world.add_box(Box(
 		extents=[1, 1, 1],
 		state=State(
@@ -127,14 +200,31 @@ if __name__ == "__main__":
 		),
 		mass=1,
 	))
+	world.add_box(Box(
+		extents=[1, 1, 1],
+		state=State(
+			position=[1.1, 2, 0.12],
+		),
+		mass=1,
+	))
 
+	traj = Trajectory(world)
+	traj.save_snapshot()
+	for _ in xrange(100):
+		traj.step(0.03, 60)
+
+	with open("trajectory.json", "w") as f:
+		json.dump(traj.data, f, indent=2)
+		f.write("\n")
+
+if False:
 	snapshot = world.snapshot()
-	print "Start:", snapshot
+	print("Start:", snapshot)
 
-	print world.snapshot()
+	print(world.snapshot())
 	world.step(0.03, 60)
-	print world.snapshot()
+	print(world.snapshot())
 
 	world.load_snapshot(snapshot)
-	print world.snapshot()
+	print(world.snapshot())
 

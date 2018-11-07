@@ -9,7 +9,7 @@ CXX=g++
 all: _simulation.so
 
 simulation_wrap.cxx: simulation.h simulation.i Makefile
-	swig -c++ -python simulation.i
+	swig -c++ -python -py3 simulation.i
 
 %.o: %.cxx
 	$(CXX) -c $(CXXFLAGS) $^ -o $@
