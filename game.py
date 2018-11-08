@@ -63,7 +63,7 @@ class RobotConfiguration:
 		self.inner_ears.append(box)
 
 	def apply_policy(self, policy_vector):
-		assert len(policy_vector) == len(self.muscles)
+		assert len(policy_vector) == len(self.muscles), "%i != %i" % (len(policy_vector), len(self.muscles))
 		for muscle_input, muscle in zip(policy_vector, self.muscles):
 			muscle.apply_input(muscle_input)
 
@@ -87,13 +87,22 @@ class RobotConfiguration:
 			muscle_data.flatten(),
 		])
 
+	def compute_utility(self):
+		# Currently utility is just the mean x coordinate across our boxes.
+		# FIXME: Reweight by center of mass.
+		return np.mean([
+			box.state.position[0]
+			for box in self.boxes
+		])
+
 class GameEngine:
 	"""GameEngine"""
 	TIME_PER_STEP = 0.1
 	MAX_SUBSTEPS = 10
 
-	def __init__(self, robot_config):
+	def __init__(self, robot_config, max_time):
 		self.robot_config = robot_config
+		self.max_time = max_time
 		self.setup()
 
 	def setup(self):
@@ -101,28 +110,37 @@ class GameEngine:
 		self.world.add_plane(physics.Plane([0, 1, 0], 0))
 		for box in self.robot_config.boxes:
 			self.world.add_box(box)
-		self.initial_state = GameState(self)
+		self.initial_state = GameState(self, total_steps=0)
 
 class GameState:
-	def __init__(self, parent_engine):
+	def __init__(self, parent_engine, total_steps):
 		self.parent_engine = parent_engine
+		self.total_steps = total_steps
+		# Capture information from parent_engine.world's current state.
 		self.snapshot = parent_engine.world.snapshot()
 		self.sensor_data = parent_engine.robot_config.compute_sensor_data()
+
+	def compute_utility(self):
+		self.parent_engine.world.load_snapshot(self.snapshot)
+		return self.parent_engine.robot_config.compute_utility()
+
+	def is_game_over(self):
+		return self.total_steps >= self.parent_engine.max_time
 
 	def execute_policy(self, policy):
 		world = self.parent_engine.world
 		world.load_snapshot(self.snapshot)
 		self.parent_engine.robot_config.apply_policy(policy)
 		world.step(self.parent_engine.TIME_PER_STEP, self.parent_engine.MAX_SUBSTEPS)
-		return GameState(self.parent_engine)
+		return GameState(self.parent_engine, self.total_steps + 1)
 
-if __name__ == "__main__":
+def build_demo_game_engine():
 	robot = RobotConfiguration()
 	boxes = [
 		robot.add_box(physics.Box(
 			extents=[0.5, 0.5, 0.5],
 			state=physics.State(
-				position=[1.1 * (i - 9), 3, math.sin(i) * 0.5],
+				position=[1.1 * (i - 4.5), 3, math.sin(i) * 0.5],
 			),
 			mass=1,
 		))
@@ -134,7 +152,7 @@ if __name__ == "__main__":
 	for b1, b2 in zip(boxes, boxes[2:]):
 		robot.add_muscle(b1, b2, 2.2)
 
-	engine = GameEngine(robot)
+	engine = GameEngine(robot, max_time=100)
 
 	# Connect each box to the next.
 	for b1, b2 in zip(boxes, boxes[1:]):
@@ -145,8 +163,11 @@ if __name__ == "__main__":
 			physics.simulation.Vec(-1.1 / 2.0, 0, 0),
 		)
 
-	traj = physics.Trajectory(engine.world)
+	return engine
 
+if __name__ == "__main__":
+	engine = build_demo_game_engine()
+	traj = physics.Trajectory(engine.world)
 	state = engine.initial_state
 	for _ in xrange(250):
 		traj.save_snapshot()

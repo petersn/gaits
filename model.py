@@ -43,7 +43,7 @@ class Network:
 			self.build_fully_connected(tower_features, self.policy_sizes),
 		)
 		# The value output is unbounded in value, and gets no non-linearity.
-		self.value_output = self.build_fully_connected(tower_features, self.policy_sizes)
+		self.value_output = self.build_fully_connected(tower_features, self.value_sizes)
 
 	def build_training(self):
 		# Make head losses.
@@ -72,7 +72,7 @@ class Network:
 
 	def new_bias_variable(self, shape):
 		self.total_parameters += np.product(shape)
-		var = tf.Variable(tf.constant(0.1, shape=shape))
+		var = tf.Variable(tf.constant(0.0, shape=shape))
 		self.parameters.append(var)
 		return var
 
@@ -146,9 +146,9 @@ def load_model(sess, path, scope_name):
 
 if __name__ == "__main__":
 	net = Network(
-		[10, 35, 20],
-		[20, 15, 10],
-		[20, 8, 1],
+		[76, 32, 32],
+		[32, 8],
+		[32, 1],
 		"net/",
 	)
 	print get_batch_norm_vars(net)
