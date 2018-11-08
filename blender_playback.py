@@ -26,7 +26,8 @@ def translate_xyz(v):
 	return v[2], v[0], v[1]
 
 def translate_quat(q):
-	return mathutils.Quaternion((0, 0, 1, 1)) * q
+	r = mathutils.Quaternion((0, 0, 1, 1)).normalized()
+	return r * q.conjugated() * r.conjugated()
 
 def copy_world_to_blender():
 	for box in world.boxes:
