@@ -10,7 +10,7 @@ import physics
 bpy.ops.object.select_all(action="SELECT")
 bpy.ops.object.delete() 
 
-with open("trajectory.json") as f:
+with open("/tmp/trajectory.json") as f:
 	desc = json.load(f)
 
 traj = physics.Trajectory.from_json(desc)
@@ -21,6 +21,9 @@ for box in world.boxes:
 	box.obj = bpy.context.scene.objects.active
 	# Set the object's dimensions.
 	box.obj.scale = box.extents
+
+# Clear the selection for purely aesthetic reasons.
+bpy.ops.object.select_all(action="DESELECT")
 
 def translate_xyz(v):
 	return v[2], v[0], v[1]

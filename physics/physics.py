@@ -207,7 +207,7 @@ if __name__ == "__main__":
 		),
 		mass=1,
 	))
-	world.physics_world_pointer.add_constraint(world.boxes[0].pointer, world.boxes[1].pointer)
+#	world.physics_world_pointer.add_constraint(world.boxes[0].pointer, world.boxes[1].pointer)
 
 	traj = Trajectory(world)
 	traj.save_snapshot()

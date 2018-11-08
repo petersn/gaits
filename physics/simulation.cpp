@@ -82,12 +82,12 @@ bt_constraint->setLowerAngLimit(0.0f);
 bt_constraint->setUpperAngLimit(0.0f);
 */
 
-void PhysicsWorld::add_constraint(PhysicsObject* obj1, PhysicsObject* obj2) {
+void PhysicsWorld::add_constraint(PhysicsObject* obj1, PhysicsObject* obj2, Vec* offset1, Vec* offset2) {
 	btTransform t1, t2;
 	t1.setRotation(btQuaternion::getIdentity());
 	t2.setRotation(btQuaternion::getIdentity());
-	t1.setOrigin({0, -1.5, 0});
-	t2.setOrigin({0, 1.5, 0});
+	t1.setOrigin(offset1->as_btVector3());
+	t2.setOrigin(offset2->as_btVector3());
 	btGeneric6DofSpringConstraint* spring = new btGeneric6DofSpringConstraint(
 		*obj1->rigidBody, *obj2->rigidBody,
 		t1, t2,

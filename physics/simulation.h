@@ -49,7 +49,7 @@ struct PhysicsWorld {
 
 	PhysicsWorld();
 	void step(float dt, int substeps);
-	void add_constraint(PhysicsObject* obj1, PhysicsObject* obj2);
+	void add_constraint(PhysicsObject* obj1, PhysicsObject* obj2, Vec* offset1, Vec* offset2);
 };
 
 struct PhysicsObject {
