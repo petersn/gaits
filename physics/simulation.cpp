@@ -19,6 +19,7 @@ void PhysicsObject::set_data(ObjectState* state) {
 	btTransform trans;
 	trans.setOrigin(state->xyz.as_btVector3());
 	trans.setRotation(state->quat.as_btQuaternion());
+	rigidBody->setWorldTransform(trans);
 	motionState->setWorldTransform(trans);
 	rigidBody->setLinearVelocity(state->vel.as_btVector3());
 	rigidBody->setAngularVelocity(state->avel.as_btVector3());

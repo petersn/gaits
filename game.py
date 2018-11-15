@@ -5,7 +5,7 @@ import numpy as np
 import physics
 
 class Muscle:
-	MUSCLE_STRENGTH = 100.0
+	MUSCLE_STRENGTH = 30.0
 
 	def __init__(self, box1, box2, resting_length):
 		self.box1 = box1
@@ -17,7 +17,7 @@ class Muscle:
 
 		The muscle keeps track of the Boxes on each end, and can read their positions from their states.
 		"""
-		return np.linalg.norm(self.box1.state.position - self.box2.state.position)
+		return np.linalg.norm(self.box1.state.position - np.array(self.box2.state.position))
 
 	def compute_ddt_length(self):
 		"""compute_ddt_length(self) -> rate of change of the muscle's length"""
@@ -26,7 +26,7 @@ class Muscle:
 
 	def compute_muscle_vector(self):
 		"""compute_muscle_vector(self) -> normalized vector from box1 to box2"""
-		vector = self.box1.state.position - self.box2.state.position
+		vector = self.box1.state.position - np.array(self.box2.state.position)
 		vector /= np.linalg.norm(vector)
 		return vector
 
@@ -56,8 +56,10 @@ class RobotConfiguration:
 		self.boxes.append(box)
 		return box
 
-	def add_muscle(self, box1, box2, resting_length):
-		self.muscles.append(Muscle(box1, box2, resting_length))
+	def add_muscle(self, box1, box2):
+		m = Muscle(box1, box2, 0.0)
+		m.resting_length = m.compute_length()
+		self.muscles.append(m)
 
 	def add_inner_ear(self, box):
 		self.inner_ears.append(box)
@@ -95,10 +97,17 @@ class RobotConfiguration:
 			for box in self.boxes
 		])
 
+	def is_on_ground(self):
+		return all(
+			box.state.position[1] < 0.55
+			for box in self.boxes
+		)
+
 class GameEngine:
 	"""GameEngine"""
 	TIME_PER_STEP = 0.1
 	MAX_SUBSTEPS = 10
+	REWARD_PER_TIME_UPRIGHT = 0.02
 
 	def __init__(self, robot_config, max_time):
 		self.robot_config = robot_config
@@ -122,9 +131,14 @@ class GameState:
 
 	def compute_utility(self):
 		self.parent_engine.world.load_snapshot(self.snapshot)
-		return self.parent_engine.robot_config.compute_utility()
+		base_utility = self.parent_engine.robot_config.compute_utility()
+		return base_utility + self.total_steps * GameEngine.REWARD_PER_TIME_UPRIGHT
 
 	def is_game_over(self):
+		# Early out if the entire robot is on the ground.
+		self.parent_engine.world.load_snapshot(self.snapshot)
+		if self.parent_engine.robot_config.is_on_ground():
+			return True
 		return self.total_steps >= self.parent_engine.max_time
 
 	def execute_policy(self, policy):
@@ -136,11 +150,80 @@ class GameState:
 
 def build_demo_game_engine():
 	robot = RobotConfiguration()
+	boxes = []
+	S = 1.2
+	def new(x, y, z):
+		b = physics.Box(
+			extents=[0.5, 0.5, 0.5],
+			state=physics.State(
+				position=[x - 2 * S, 0.5 + y, z],
+			),
+			mass=1,
+		)
+		boxes.append(b)
+		robot.add_box(b)
+		return b
+	callbacks = []
+	def link(b1, b2):
+		def _():
+			vec = b2.state.position - np.array(b1.state.position)
+			engine.world.physics_world_pointer.add_constraint(
+				b1.pointer,
+				b2.pointer,
+				physics.simulation.Vec(*(+vec / 2.0)),
+				physics.simulation.Vec(*(-vec / 2.0)),
+			)
+		callbacks.append(_)
+	def leg(x, z):
+		bottom = new(x, S * 0, z)
+		middle = new(x, S * 1, z)
+		top = new(x, S * 2, z)
+		link(bottom, middle)
+		link(middle, top)
+		return top
+
+	rear1  = leg(0*S, -S)
+	rear2  = leg(0*S, +S)
+	front1 = leg(3*S, -S)
+	front2 = leg(3*S, +S)
+
+	middle1 = new(0*S, 2*S, 0)
+	middle2 = new(1*S, 2*S, 0)
+	middle3 = new(2*S, 2*S, 0)
+	middle4 = new(3*S, 2*S, 0)
+
+	link(middle1, middle2)
+	link(middle2, middle3)
+	link(middle3, middle4)
+	link(rear1, middle1)
+	link(rear2, middle1)
+	link(front1, middle4)
+	link(front2, middle4)
+
+	for i, b1 in enumerate(boxes):
+		for b2 in boxes[:i]:
+			robot.add_muscle(b1, b2)
+
+#	# Add a muscle connecting each box to the box two down the line.
+#	for b1, b2 in zip(boxes, boxes[2:]):
+#		robot.add_muscle(b1, b2, 2.2)
+
+	engine = GameEngine(robot, max_time=100)
+	for f in callbacks:
+		f()
+
+#	# Connect each box to the next.
+#	for b1, b2 in zip(boxes, boxes[1:]):
+
+	return engine
+
+def build_demo_game_engine_old():
+	robot = RobotConfiguration()
 	boxes = [
 		robot.add_box(physics.Box(
 			extents=[0.5, 0.5, 0.5],
 			state=physics.State(
-				position=[1.1 * (i - 4.5), 3, math.sin(i) * 0.5],
+				position=[1.1 * (i - 4.5), 0.5, math.sin(i) * 0.5],
 			),
 			mass=1,
 		))
@@ -167,11 +250,20 @@ def build_demo_game_engine():
 
 if __name__ == "__main__":
 	engine = build_demo_game_engine()
+	muscle_count = len(engine.robot_config.muscles)
+	sensor_dims = len(engine.initial_state.sensor_data)
+
+	print "Muscle count:", muscle_count 
+	print "Sensor dims:", sensor_dims
+
 	traj = physics.Trajectory(engine.world)
 	state = engine.initial_state
-	for _ in xrange(250):
+	for i in xrange(250):
 		traj.save_snapshot()
-		policy = np.clip(np.random.randn(8), -1, 1)
+		policy = np.clip(np.random.randn(muscle_count), -1, 1)
+#		if i == 125:
+#			state = engine.initial_state
+#			engine.world.load_snapshot(engine.initial_state.snapshot)
 		state = state.execute_policy(policy)
 
 	with open("/tmp/trajectory.json", "w") as f:

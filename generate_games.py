@@ -13,6 +13,7 @@ def generate_game(args):
 	entry = {"samples": [], "outcome": None}
 	m = mcts.MCTS(game_engine.initial_state)
 	all_steps = 0
+	collapse = 0
 	while True:
 		if m.root_node.state.is_game_over():
 			break
@@ -25,9 +26,15 @@ def generate_game(args):
 		# Compute the proportion of visits each move received.
 		total_visits = float(m.root_node.all_edge_visits)
 		weighted_moves = {
-			move: m.root_node.outgoing_edges[move].edge_visits / total_visits
+			move: (
+				m.root_node.outgoing_edges[move].edge_visits / total_visits
+				if move in m.root_node.outgoing_edges
+				else 0
+			)
 			for move in m.root_node.state.moves
 		}
+		if weighted_moves["m0"] == 1.0:
+			collapse += 1
 
 		# Mix the policies by their visit counts to get a training policy.
 		training_policy = np.sum([
@@ -47,6 +54,9 @@ def generate_game(args):
 		m.play(selected_move)
 
 	entry["outcome"] = m.root_node.state.compute_utility()
+
+	if collapse:
+		print "!"*100, "Collapses:", collapse
 
 	return entry
 

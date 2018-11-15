@@ -47,7 +47,7 @@ class Network:
 
 	def build_training(self):
 		# Make head losses.
-		self.policy_loss = tf.reduce_mean(tf.square(self.desired_policy_ph - self.policy_output))
+		self.policy_loss = self.policy_loss_weight_ph * tf.reduce_mean(tf.square(self.desired_policy_ph - self.policy_output))
 		self.value_loss = tf.reduce_mean(tf.square(self.desired_value_ph - self.value_output))
 		# Make regularization loss.
 		regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
@@ -55,7 +55,7 @@ class Network:
 		self.regularization_term = tf.contrib.layers.apply_regularization(regularizer, reg_variables)
 		# Loss is the sum of these three.
 		# We throw in an aribtrary weight on the policy loss, to scale it relative to the value loss.
-		self.loss = self.policy_loss_weight_ph * self.policy_loss + self.value_loss + self.regularization_term
+		self.loss = self.policy_loss + self.value_loss + self.regularization_term
 
 		# Associate batch normalization with training.
 		update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope_name)
@@ -123,7 +123,7 @@ def save_model(sess, net, path):
 	print "\x1b[35mSaved model to:\x1b[0m", path
 
 # XXX: Still horrifically fragile wrt batch norm variables due to the above horrible graph scraping stuff.
-def load_model(sess, path, scope_name):
+def load_model(sess, path, scope_name, build_training=False):
 	with open(path) as f:
 		metadata = json.loads(f.readline())
 		x_conv_weights, x_bn_params = np.load(f)
@@ -133,6 +133,9 @@ def load_model(sess, path, scope_name):
 		metadata["value"],
 		scope_name=scope_name,
 	)
+	if build_training:
+		net.build_training()
+		sess.run(tf.global_variables_initializer())
 	assert len(net.parameters) == len(x_conv_weights), "Parameter count mismatch!"
 	operations = []
 	for var, value in zip(net.parameters, x_conv_weights):
@@ -145,10 +148,16 @@ def load_model(sess, path, scope_name):
 	return net
 
 if __name__ == "__main__":
+#	net = Network(
+#		[76, 32, 32],
+#		[32, 8],
+#		[32, 1],
+#		"net/",
+#	)
 	net = Network(
-		[76, 32, 32],
-		[32, 8],
-		[32, 1],
+		[240, 128, 128],
+		[128, 120],
+		[128, 1],
 		"net/",
 	)
 	print get_batch_norm_vars(net)

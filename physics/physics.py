@@ -220,12 +220,17 @@ if __name__ == "__main__":
 
 if False:
 	snapshot = world.snapshot()
-	print("Start:", snapshot)
+	print("Start:")
+	print(snapshot)
 
-	print(world.snapshot())
+#	print()
+#	print(world.snapshot())
 	world.step(0.03, 60)
+	print()
 	print(world.snapshot())
 
 	world.load_snapshot(snapshot)
+	print()
 	print(world.snapshot())
+	print(world.snapshot() == snapshot)
 

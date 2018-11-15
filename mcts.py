@@ -1,13 +1,17 @@
 #!/usr/bin/python
 
-import collections, logging
+import collections, logging, random
 import numpy as np
 import tensorflow as tf
 import model
 import game
 
-initialized = False
+logging.basicConfig(
+	format="[%(process)5d] %(message)s",
+	level=logging.DEBUG,
+)
 
+initialized = False
 def initialize_model(path):
 	global network, sess, initialized
 	assert not initialized
@@ -18,11 +22,18 @@ def initialize_model(path):
 MoveData = collections.namedtuple("MoveData", ["name", "probability", "policy"])
 
 class NNEvaluator:
+#	ALTERNATIVES = [
+#		(8 / 15.0, 0.0),
+#		(4 / 15.0, 0.1),
+#		(2 / 15.0, 0.2),
+#		(1 / 15.0, 0.3),
+#	]
 	ALTERNATIVES = [
-		(8 / 15.0, 0.0),
-		(4 / 15.0, 0.1),
-		(2 / 15.0, 0.2),
-		(1 / 15.0, 0.3),
+		(16 / 31.0, 0.05),
+		( 8 / 31.0, 0.10),
+		( 4 / 31.0, 0.15),
+		( 2 / 31.0, 0.20),
+		( 1 / 31.0, 0.25),
 	]
 
 	def populate(self, game_state):
@@ -36,7 +47,7 @@ class NNEvaluator:
 			game_state.value_estimate = game_state.compute_utility()
 
 		# Otherwise, use our network to compute a policy and value estimate.
-		(policy_output,), (value_output,) = sess.run(
+		(policy_output,), ((value_output,),) = sess.run(
 			[network.policy_output, network.value_output],
 			feed_dict={
 				network.input_ph: [game_state.sensor_data],
@@ -87,6 +98,17 @@ class MCTSNode:
 		self.all_edge_visits = 0
 		self.outgoing_edges = {}
 		self.graph_name_suffix = ""
+
+	def execute_move(self, move):
+		return self.state.execute_policy(
+			self.state.moves[move].policy,
+		)
+
+	def visit_weighted_edge_score(self):
+		return sum(
+			edge.get_edge_score() * edge.edge_visits
+			for edge in self.outgoing_edges.itervalues()
+		) / float(self.all_edge_visits)
 
 	def total_action_score(self, move):
 		if move in self.outgoing_edges:
@@ -147,11 +169,27 @@ class TopN:
 		for i in items:
 			self.add(i)
 
+def sample_by_weight(weights):
+	assert abs(sum(weights.itervalues()) - 1) < 1e-6, "Distribution not normalized: %r" % (weights,)
+	x = random.random()
+	for outcome, weight in weights.iteritems():
+		if x <= weight:
+			return outcome
+		x -= weight
+	# If we somehow failed to pick anyone due to rounding then return an arbitrary element.
+	return weights.iterkeys().next()
+
 class MCTS:
 	exploration_parameter = 1.0
 
 	def __init__(self, root_state):
 		self.root_node = MCTSNode(root_state)
+
+	def get_most_visited_root_move(self):
+		return max(
+			self.root_node.outgoing_edges,
+			key=lambda move: self.root_node.outgoing_edges[move].edge_visits,
+		)
 
 	def select_principal_variation(self, best=False):
 #		print "  SELECT PV"
@@ -180,9 +218,7 @@ class MCTS:
 #		print "  PV VALUE:", node, move, edges_on_path
 		# 2) If the move is non-null, expand once.
 		if move != None:
-			new_state = node.state.execute_policy(
-				node.state.moves[move].policy,
-			)
+			new_state = node.execute_move(move)
 			new_node = MCTSNode(new_state, parent=node)
 #			new_node.graph_name_suffix = to_move_name(move)
 			new_edge = node.outgoing_edges[move] = MCTSEdge(move, new_node, parent_node=node)
@@ -201,23 +237,25 @@ class MCTS:
 		# Convert the expected value result into a score.
 		value_score = new_node.state.value_estimate #(new_node.board.evaluations.value + 1) / 2.0
 		# 4) Backup.
+		edge = None
 		for edge in reversed(edges_on_path):
 			edge.adjust_score(value_score)
 			edge.parent_node.all_edge_visits += 1
 		if not edges_on_path:
 			self.write_graph()
 			logging.debug("WARNING no edges on path!")
+		if edge is None:
+			assert self.root_node.state.is_game_over()
+			return
 		# The final value of edge encodes the very first edge out of the root.
 		return edge
 
-	def play(self, player, move, print_variation_count=True):
-		assert self.root_node.board.to_move == player, "Bad play direction for MCTS!"
+	def play(self, move, print_variation_count=False):
 		if move not in self.root_node.outgoing_edges:
 			if print_variation_count:
 				logging.debug("Completely unexpected variation!")
-			new_board = self.root_node.board.copy()
-			new_board.move(move)
-			self.root_node = MCTSNode(new_board)
+			new_state = self.root_node.execute_move(move)
+			self.root_node = MCTSNode(new_state)
 			return
 		edge = self.root_node.outgoing_edges[move]
 		if print_variation_count:

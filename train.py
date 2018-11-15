@@ -43,7 +43,7 @@ if __name__ == "__main__":
 	parser.add_argument("--steps", metavar="COUNT", type=int, default=1000, help="Training steps.")
 	parser.add_argument("--minibatch-size", metavar="COUNT", type=int, default=512, help="Minibatch size.")
 	parser.add_argument("--learning-rate", metavar="LR", type=float, default=0.001, help="Learning rate.")
-	parser.add_argument("--policy-loss-weight", metavar="X", type=float, default=1.0, help="Scale that's applied to the policy loss.")
+	parser.add_argument("--policy-loss-weight", metavar="X", type=float, default=50.0, help="Scale that's applied to the policy loss.")
 	args = parser.parse_args()
 	print "Arguments:", args
 
