@@ -5,7 +5,7 @@ import numpy as np
 import physics
 
 class Muscle:
-	MUSCLE_STRENGTH = 30.0
+	MUSCLE_STRENGTH = 15.0
 
 	def __init__(self, box1, box2, resting_length):
 		self.box1 = box1
@@ -93,7 +93,7 @@ class RobotConfiguration:
 		# Currently utility is just the mean x coordinate across our boxes.
 		# FIXME: Reweight by center of mass.
 		return np.mean([
-			box.state.position[0]
+			box.state.position[0] + 2 * box.state.position[1]
 			for box in self.boxes
 		])
 
@@ -107,7 +107,7 @@ class GameEngine:
 	"""GameEngine"""
 	TIME_PER_STEP = 0.1
 	MAX_SUBSTEPS = 10
-	REWARD_PER_TIME_UPRIGHT = 0.02
+	REWARD_PER_TIME_UPRIGHT = 0.0 #0.02
 
 	def __init__(self, robot_config, max_time):
 		self.robot_config = robot_config

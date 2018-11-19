@@ -30,9 +30,10 @@ class Network:
 		# Construct input/output placeholders.
 		self.input_ph = tf.placeholder(tf.float32, shape=[None, self.tower_sizes[0]], name="input_placeholder")
 		self.desired_policy_ph = tf.placeholder(tf.float32,	shape=[None, self.policy_sizes[-1]], name="desired_policy_placeholder")
-		self.desired_value_ph = tf.placeholder(tf.float32, shape=[None, self.value_sizes[-1]], name="desired_value_placeholder")
+#		self.desired_value_ph = tf.placeholder(tf.float32, shape=[None, self.value_sizes[-1]], name="desired_value_placeholder")
 		self.learning_rate_ph = tf.placeholder(tf.float32, shape=[], name="learning_rate")
 		self.policy_loss_weight_ph = tf.placeholder(tf.float32, shape=[], name="policy_loss_weight")
+		self.loss_multiplier_ph = tf.placeholder(tf.float32, shape=[None], name="loss_multiplier")
 		self.is_training_ph = tf.placeholder(tf.bool, shape=[], name="is_training")
 
 		# Begin constructing the data flow.
@@ -47,15 +48,21 @@ class Network:
 
 	def build_training(self):
 		# Make head losses.
-		self.policy_loss = self.policy_loss_weight_ph * tf.reduce_mean(tf.square(self.desired_policy_ph - self.policy_output))
-		self.value_loss = tf.reduce_mean(tf.square(self.desired_value_ph - self.value_output))
+		self.policy_loss = self.policy_loss_weight_ph * tf.reduce_mean(
+			self.loss_multiplier_ph * tf.reduce_mean(
+				tf.square(self.desired_policy_ph - self.policy_output),
+				axis=1,
+			),
+		)
+#		self.value_loss = tf.reduce_mean(tf.square(self.desired_value_ph - self.value_output))
 		# Make regularization loss.
 		regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
 		reg_variables = tf.trainable_variables(scope=self.scope_name)
 		self.regularization_term = tf.contrib.layers.apply_regularization(regularizer, reg_variables)
 		# Loss is the sum of these three.
 		# We throw in an aribtrary weight on the policy loss, to scale it relative to the value loss.
-		self.loss = self.policy_loss + self.value_loss + self.regularization_term
+#		self.loss = self.policy_loss + self.value_loss + self.regularization_term
+		self.loss = self.policy_loss + self.regularization_term
 
 		# Associate batch normalization with training.
 		update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope_name)
@@ -77,7 +84,13 @@ class Network:
 		return var
 
 	def train(self, samples, learning_rate, policy_loss_weight):
-		self.run_on_samples(self.train_step.run, samples, learning_rate=learning_rate, policy_loss_weight=policy_loss_weight, is_training=True)
+		self.run_on_samples(
+			self.train_step.run,
+			samples,
+			learning_rate=learning_rate,
+			policy_loss_weight=policy_loss_weight,
+			is_training=True,
+		)
 
 	def get_loss(self, samples):
 		return self.run_on_samples(self.loss.eval, samples)
@@ -98,7 +111,8 @@ class Network:
 		return f(feed_dict={
 			self.input_ph:              samples["features"],
 			self.desired_policy_ph:     samples["policies"],
-			self.desired_value_ph:      samples["values"],
+#			self.desired_value_ph:      samples["values"],
+			self.loss_multiplier_ph:    samples["loss_multipliers"],
 			self.learning_rate_ph:      learning_rate,
 			self.policy_loss_weight_ph: policy_loss_weight,
 			self.is_training_ph:        is_training,
