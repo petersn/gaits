@@ -5,7 +5,7 @@ import numpy as np
 import physics
 
 class Muscle:
-	MUSCLE_STRENGTH = 15.0
+	MUSCLE_STRENGTH = 30.0
 
 	def __init__(self, box1, box2, resting_length):
 		self.box1 = box1
@@ -119,11 +119,12 @@ class GameEngine:
 		self.world.add_plane(physics.Plane([0, 1, 0], 0))
 		for box in self.robot_config.boxes:
 			self.world.add_box(box)
-		self.initial_state = GameState(self, total_steps=0)
+		self.initial_state = GameState(parent_engine=self, parent_state=None, total_steps=0)
 
 class GameState:
-	def __init__(self, parent_engine, total_steps):
+	def __init__(self, parent_engine, parent_state, total_steps):
 		self.parent_engine = parent_engine
+		self.parent_state = parent_state
 		self.total_steps = total_steps
 		# Capture information from parent_engine.world's current state.
 		self.snapshot = parent_engine.world.snapshot()
@@ -146,7 +147,7 @@ class GameState:
 		world.load_snapshot(self.snapshot)
 		self.parent_engine.robot_config.apply_policy(policy)
 		world.step(self.parent_engine.TIME_PER_STEP, self.parent_engine.MAX_SUBSTEPS)
-		return GameState(self.parent_engine, self.total_steps + 1)
+		return GameState(self.parent_engine, self, self.total_steps + 1)
 
 def build_demo_game_engine():
 	robot = RobotConfiguration()
