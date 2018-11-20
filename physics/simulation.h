@@ -3,8 +3,10 @@
 #ifndef PHYS_SIMULATION_H
 #define PHYS_SIMULATION_H
 
-#include <btBulletDynamicsCommon.h>
+#include <cstdint>
+#include <vector>
 #include <list>
+#include <btBulletDynamicsCommon.h>
 
 struct Vec {
 	float x, y, z, w;
@@ -58,8 +60,10 @@ struct PhysicsObject {
 	btDefaultMotionState* motionState;
 	btRigidBody* rigidBody;
 
+	btVector3 get_position();
 	void set_data(ObjectState* state);
 	void get_data(ObjectState* state_out);
+	void apply_force(btVector3 force, btVector3 world_space_offset);
 	void apply_force(Vec* force, Vec* world_space_offset);
 };
 
@@ -69,6 +73,34 @@ struct Box : public PhysicsObject {
 
 struct StaticPlane : public PhysicsObject {
 	StaticPlane(PhysicsWorld* parent, Vec* normal, float constant);
+};
+
+// Fast robot implementation.
+
+struct MuscleEntry {
+	PhysicsObject* obj1;
+	PhysicsObject* obj2;
+	float resting_length;
+
+	btVector3 compute_offset();
+	float compute_length();
+	float compute_ddt_length();
+	void apply_input(float muscle_input, float muscle_strength);
+};
+
+struct Robot {
+	float muscle_strength = 1.0;
+	std::vector<PhysicsObject*> components;
+	std::vector<MuscleEntry> muscles;
+	std::vector<PhysicsObject*> inner_ears;
+
+	void add_component(PhysicsObject* obj);
+	void add_muscle(PhysicsObject* obj1, PhysicsObject* obj2);
+	void add_inner_ear(PhysicsObject* obj);
+	void apply_policy(int policy_vector_length, uint64_t _policy_vector);
+	void compute_sensor_data(int sensor_data_buffer_length, uint64_t _sensor_data_buffer);
+	float compute_utility();
+	bool is_on_ground();
 };
 
 #endif

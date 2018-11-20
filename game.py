@@ -1,8 +1,10 @@
 #!/usr/bin/python
 
-import math, json
+import math, json, ctypes
 import numpy as np
 import physics
+
+c_float_p = ctypes.POINTER(ctypes.c_float)
 
 class Muscle:
 	MUSCLE_STRENGTH = 30.0
@@ -43,7 +45,7 @@ class Muscle:
 			physics.simulation.Vec(0, 0, 0),
 		)
 
-class RobotConfiguration:	
+class SlowRobotConfiguration:	
 	def __init__(self):
 		# list of physics.Box
 		self.boxes = []
@@ -60,6 +62,7 @@ class RobotConfiguration:
 		m = Muscle(box1, box2, 0.0)
 		m.resting_length = m.compute_length()
 		self.muscles.append(m)
+		self.muscle_count = len(self.muscles)
 
 	def add_inner_ear(self, box):
 		self.inner_ears.append(box)
@@ -103,22 +106,62 @@ class RobotConfiguration:
 			for box in self.boxes
 		)
 
+class RobotConfiguration:
+	def __init__(self):
+		self.robot = physics.simulation.Robot()
+		self.robot.muscle_strength = Muscle.MUSCLE_STRENGTH
+		self.muscle_count = 0
+		self.inner_ear_count = 0
+
+	def add_box(self, box):
+		self.robot.add_component(box.pointer)
+
+	def add_muscle(self, box1, box2):
+		self.muscle_count += 1
+		self.robot.add_muscle(box1.pointer, box2.pointer)
+
+	def add_inner_ear(self, box):
+		self.inner_ear_count += 1
+		self.robot.add_inner_ear(box.pointer)
+
+	def apply_policy(self, policy_vector):
+		length = policy_vector.size
+		policy_vector = policy_vector.astype(np.float32).ravel()
+#		pointer = policy_vector.ctypes.data_as(c_float_p)
+		self.robot.apply_policy(length, policy_vector.ctypes.data)
+
+	def compute_sensor_data(self):
+		expected_length = 6 * self.inner_ear_count + 2 * self.muscle_count
+		result = np.zeros(expected_length, dtype=np.float32)
+		#pointer = result.ctypes.data_as(c_float_p)
+#		print "Pointer:", pointer
+#		print pointer
+		self.robot.compute_sensor_data(expected_length, result.ctypes.data)#pointer)
+		return result
+
+	def compute_utility(self):
+		return self.robot.compute_utility()
+
+	def is_on_ground(self):
+		return self.robot.is_on_ground()
+
+#RobotConfiguration = SlowRobotConfiguration
+
 class GameEngine:
 	"""GameEngine"""
 	TIME_PER_STEP = 0.1
 	MAX_SUBSTEPS = 10
 	REWARD_PER_TIME_UPRIGHT = 0.0 #0.02
 
-	def __init__(self, robot_config, max_time):
+	def __init__(self, world, robot_config, max_time):
+		self.world = world
 		self.robot_config = robot_config
 		self.max_time = max_time
 		self.setup()
 
 	def setup(self):
-		self.world = physics.World()
-		self.world.add_plane(physics.Plane([0, 1, 0], 0))
-		for box in self.robot_config.boxes:
-			self.world.add_box(box)
+#		for box in self.robot_config.boxes:
+#			self.world.add_box(box)
 		self.initial_state = GameState(parent_engine=self, parent_state=None, total_steps=0)
 
 class GameState:
@@ -127,29 +170,40 @@ class GameState:
 		self.parent_state = parent_state
 		self.total_steps = total_steps
 		# Capture information from parent_engine.world's current state.
-		self.snapshot = parent_engine.world.snapshot()
+		#self.snapshot = parent_engine.world.snapshot()
 		self.sensor_data = parent_engine.robot_config.compute_sensor_data()
+		self.utility_cache = self._compute_utility()
+		self.game_over_cache = self._is_game_over()
 
-	def compute_utility(self):
-		self.parent_engine.world.load_snapshot(self.snapshot)
+	def _compute_utility(self):
+		#self.parent_engine.world.load_snapshot(self.snapshot)
 		base_utility = self.parent_engine.robot_config.compute_utility()
 		return base_utility + self.total_steps * GameEngine.REWARD_PER_TIME_UPRIGHT
 
-	def is_game_over(self):
+	def _is_game_over(self):
 		# Early out if the entire robot is on the ground.
-		self.parent_engine.world.load_snapshot(self.snapshot)
+		#self.parent_engine.world.load_snapshot(self.snapshot)
 		if self.parent_engine.robot_config.is_on_ground():
 			return True
 		return self.total_steps >= self.parent_engine.max_time
 
+	def compute_utility(self):
+		return self.utility_cache
+
+	def is_game_over(self):
+		return self.game_over_cache
+
 	def execute_policy(self, policy):
 		world = self.parent_engine.world
-		world.load_snapshot(self.snapshot)
+		#world.load_snapshot(self.snapshot)
 		self.parent_engine.robot_config.apply_policy(policy)
 		world.step(self.parent_engine.TIME_PER_STEP, self.parent_engine.MAX_SUBSTEPS)
 		return GameState(self.parent_engine, self, self.total_steps + 1)
 
 def build_demo_game_engine():
+	world = physics.World()
+	world.add_plane(physics.Plane([0, 1, 0], 0))
+
 	robot = RobotConfiguration()
 	boxes = []
 	S = 1.2
@@ -161,8 +215,9 @@ def build_demo_game_engine():
 			),
 			mass=1,
 		)
-		boxes.append(b)
+		world.add_box(b)
 		robot.add_box(b)
+		boxes.append(b)
 		return b
 	callbacks = []
 	def link(b1, b2):
@@ -209,7 +264,7 @@ def build_demo_game_engine():
 #	for b1, b2 in zip(boxes, boxes[2:]):
 #		robot.add_muscle(b1, b2, 2.2)
 
-	engine = GameEngine(robot, max_time=100)
+	engine = GameEngine(world, robot, max_time=100)
 	for f in callbacks:
 		f()
 
@@ -251,7 +306,7 @@ def build_demo_game_engine_old():
 
 if __name__ == "__main__":
 	engine = build_demo_game_engine()
-	muscle_count = len(engine.robot_config.muscles)
+	muscle_count = engine.robot_config.muscle_count #len(engine.robot_config.muscles)
 	sensor_dims = len(engine.initial_state.sensor_data)
 
 	print "Muscle count:", muscle_count 

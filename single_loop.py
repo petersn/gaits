@@ -123,9 +123,9 @@ if __name__ == "__main__":
 
 	utilities = []
 
-	#for episode_number in itertools.count(1):
-	for episode_number in xrange(1, 21):
-		if episode_number % 50 == 0:
+	for episode_number in itertools.count(1):
+	#for episode_number in xrange(1, 21):
+		if episode_number % 100 == 0:
 			print "Saving trajectory."
 			samples = run_episode("/tmp/trajectory.json")
 		else:
@@ -155,7 +155,7 @@ if __name__ == "__main__":
 				network.is_training_ph:        True,
 			},
 		)
-		if episode_number % 5 == 0:
+		if episode_number % 10 == 0:
 			recent_utility = np.mean(utilities[-50:])
 			print "Episode: %3i (%6i samples) -- Utility: %.5f -- Policy loss: %.5f -- Value loss: %.5f" % (
 				episode_number,
@@ -165,7 +165,7 @@ if __name__ == "__main__":
 				value_loss,
 			)
 
-		if episode_number % 500 == 0:
+		if episode_number % 1000 == 0:
 			output_path = model_path(model_number + 1)
 			model.save_model(sess, network, output_path)
 			model_number += 1
