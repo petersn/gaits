@@ -6,24 +6,31 @@ sys.path.append(".")
 
 import physics
 
-# Delete the initial objects.
-bpy.ops.object.select_all(action="SELECT")
-bpy.ops.object.delete() 
+bpy.context.scene.frame_end = 100
 
-with open("/tmp/trajectory.json") as f:
-	desc = json.load(f)
+def load_from_json():
+	print("RELOAD")
 
-traj = physics.Trajectory.from_json(desc)
-world = traj.world
+	# Delete the initial objects.
+	bpy.ops.object.select_all(action="SELECT")
+	bpy.ops.object.delete()
 
-for box in world.boxes:
-	bpy.ops.mesh.primitive_cube_add()
-	box.obj = bpy.context.scene.objects.active
-	# Set the object's dimensions.
-	box.obj.scale = box.extents
+	global desc, traj, world
+	with open("/tmp/trajectory.json") as f:
+		desc = json.load(f)
+	traj = physics.Trajectory.from_json(desc)
+	world = traj.world
 
-# Clear the selection for purely aesthetic reasons.
-bpy.ops.object.select_all(action="DESELECT")
+	for box in world.boxes:
+		bpy.ops.mesh.primitive_cube_add()
+		box.obj = bpy.context.scene.objects.active
+		# Set the object's dimensions.
+		box.obj.scale = box.extents
+
+	# Clear the selection for purely aesthetic reasons.
+	bpy.ops.object.select_all(action="DESELECT")
+
+load_from_json()
 
 def translate_xyz(v):
 	return v[2], v[0], v[1]
@@ -45,6 +52,8 @@ def frame_change(scene):
 	i = max(0, min(len(traj.data["snapshots"]) - 1, i))
 	traj.world.load_snapshot(traj.data["snapshots"][i])
 	copy_world_to_blender()
+	if bpy.context.scene.frame_current >= 100:
+		load_from_json()
 
 bpy.app.handlers.frame_change_post.append(frame_change)
 

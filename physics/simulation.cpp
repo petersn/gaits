@@ -1,5 +1,6 @@
 // Simulation
 
+#include <iostream>
 #include "simulation.h"
 
 PhysicsWorld::PhysicsWorld() {
@@ -9,6 +10,10 @@ PhysicsWorld::PhysicsWorld() {
 	solver = new btSequentialImpulseConstraintSolver;
 	dynamicsWorld = new btDiscreteDynamicsWorld(dispatcher, broadphase, solver, collisionConfiguration);
 	dynamicsWorld->setGravity(btVector3{0, -9.8, 0});
+}
+
+PhysicsWorld::~PhysicsWorld() {
+
 }
 
 void PhysicsWorld::step(float dt, int substeps) {
@@ -87,11 +92,14 @@ void PhysicsWorld::add_constraint(PhysicsObject* obj1, PhysicsObject* obj2, Vec*
 	t2.setRotation(btQuaternion::getIdentity());
 	t1.setOrigin(offset1->as_btVector3());
 	t2.setOrigin(offset2->as_btVector3());
-	btGeneric6DofSpringConstraint* spring = new btGeneric6DofSpringConstraint(
+	btGeneric6DofConstraint* spring = new btGeneric6DofSpringConstraint(
 		*obj1->rigidBody, *obj2->rigidBody,
 		t1, t2,
 		true
 	);
+	float C = 0.2;
+	spring->setAngularLowerLimit(btVector3(-C, -C, -C));
+	spring->setAngularUpperLimit(btVector3(+C, +C, +C));
 	dynamicsWorld->addConstraint(spring);
 }
 
@@ -153,10 +161,20 @@ void Robot::compute_sensor_data(int sensor_data_buffer_length, uint64_t _sensor_
 		sensor_data_buffer[0] = state.vel.x;
 		sensor_data_buffer[1] = state.vel.y;
 		sensor_data_buffer[2] = state.vel.z;
+
 		sensor_data_buffer[3] = state.avel.x;
 		sensor_data_buffer[4] = state.avel.y;
 		sensor_data_buffer[5] = state.avel.z;
-		sensor_data_buffer += 6;
+
+		sensor_data_buffer[6] = state.quat.x;
+		sensor_data_buffer[7] = state.quat.y;
+		sensor_data_buffer[8] = state.quat.z;
+		sensor_data_buffer[9] = state.quat.w;
+
+		sensor_data_buffer[10] = state.xyz.x;
+		sensor_data_buffer[11] = state.xyz.y;
+		sensor_data_buffer[12] = state.xyz.z;
+		sensor_data_buffer += 3 + 3 + 4 + 3;
 	}
 	// Write muscle data.
 	for (MuscleEntry& muscle : muscles) {
@@ -175,6 +193,7 @@ float Robot::compute_utility() {
 		utility += pos.getX() + 2 * pos.getY();
 	}
 	utility /= components.size();
+	return utility;
 }
 
 bool Robot::is_on_ground() {

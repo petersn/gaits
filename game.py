@@ -7,7 +7,7 @@ import physics
 c_float_p = ctypes.POINTER(ctypes.c_float)
 
 class Muscle:
-	MUSCLE_STRENGTH = 30.0
+	MUSCLE_STRENGTH = 10.0
 
 	def __init__(self, box1, box2, resting_length):
 		self.box1 = box1
@@ -131,7 +131,7 @@ class RobotConfiguration:
 		self.robot.apply_policy(length, policy_vector.ctypes.data)
 
 	def compute_sensor_data(self):
-		expected_length = 6 * self.inner_ear_count + 2 * self.muscle_count
+		expected_length = 13 * self.inner_ear_count + 2 * self.muscle_count
 		result = np.zeros(expected_length, dtype=np.float32)
 		#pointer = result.ctypes.data_as(c_float_p)
 #		print "Pointer:", pointer
@@ -256,6 +256,8 @@ def build_demo_game_engine():
 	link(front1, middle4)
 	link(front2, middle4)
 
+	for b in boxes:
+		robot.add_inner_ear(b)
 	for i, b1 in enumerate(boxes):
 		for b2 in boxes[:i]:
 			robot.add_muscle(b1, b2)

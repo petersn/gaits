@@ -50,6 +50,7 @@ struct PhysicsWorld {
 	std::list<PhysicsObject*> objects;
 
 	PhysicsWorld();
+	~PhysicsWorld();
 	void step(float dt, int substeps);
 	void add_constraint(PhysicsObject* obj1, PhysicsObject* obj2, Vec* offset1, Vec* offset2);
 };

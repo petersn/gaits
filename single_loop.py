@@ -7,8 +7,8 @@ import physics
 import model
 import game
 
-TEMPERATURE = 0.05
-ADDITIVE_TEMP = 0.05
+TEMPERATURE = 0.6
+ADDITIVE_TEMP = 0.6
 
 logging.basicConfig(
 	format="[%(process)5d] %(message)s",
@@ -69,7 +69,7 @@ def run_episode(trajectory_path=None):
 			f.write("\n")
 	return samples
 
-GAMMA = 0.94
+GAMMA = 0.99
 
 def gamma_discount(samples):
 	assert isinstance(samples, list)
@@ -94,12 +94,14 @@ if __name__ == "__main__":
 	)
 	parser.add_argument("--network-format", metavar="STR", required=True, help="Format string that yields all the networks.")
 	parser.add_argument("--init-random", action="store_true", help="Instead of doing a training loop just initialize model 0 randomly.")
+	parser.add_argument("--total-episodes", type=int, default=10000, help="Number of episodes to run.")
 	args = parser.parse_args()
 
 	if args.init_random:
 		print "===== Initializing a random model ====="
 		network = model.Network(
-			[2400, 192, 192, 192, 192],
+			#[2400, 192, 192, 192, 192],
+			[4480, 192, 192, 192, 192],
 			[192, 120],
 			[192, 32, 1],
 			"net/",
@@ -122,11 +124,11 @@ if __name__ == "__main__":
 	total_training_samples = 0
 
 	utilities = []
-
-	for episode_number in itertools.count(1):
+	#itertools.count(1):
+	for episode_number in xrange(1, 1 + args.total_episodes):
 	#for episode_number in xrange(1, 21):
-		if episode_number % 100 == 0:
-			print "Saving trajectory."
+		if episode_number % 25 == 0:
+#			print "Saving trajectory."
 			samples = run_episode("/tmp/trajectory.json")
 		else:
 			samples = run_episode()
@@ -150,14 +152,14 @@ if __name__ == "__main__":
 				network.desired_policy_ph:     batch["policies"],
 				network.desired_value_ph:      batch["values"],
 				network.loss_multiplier_ph:    batch["loss_multipliers"],
-				network.learning_rate_ph:      0.05,
-				network.policy_loss_weight_ph: 100.0,
+				network.learning_rate_ph:      0.00025,
+				network.policy_loss_weight_ph: 25.0,
 				network.is_training_ph:        True,
 			},
 		)
-		if episode_number % 10 == 0:
+		if episode_number % 25 == 0:
 			recent_utility = np.mean(utilities[-50:])
-			print "Episode: %3i (%6i samples) -- Utility: %.5f -- Policy loss: %.5f -- Value loss: %.5f" % (
+			print "Episode: %3i (%7i samples) -- Utility: %.5f -- Policy loss: %.5f -- Value loss: %.5f" % (
 				episode_number,
 				total_training_samples,
 				recent_utility,
