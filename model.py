@@ -6,6 +6,21 @@ import tensorflow as tf
 
 NONLINEARITY = tf.nn.relu
 
+def sample_by_weight(weights):
+	assert abs(sum(weights.itervalues()) - 1) < 1e-6, \
+		"Distribution not normalized: %r" % (weights,)
+	x = random.random()
+	for outcome, weight in weights.iteritems():
+		if x <= weight:
+			return outcome
+		x -= weight
+	# If we somehow failed to pick anyone due to rounding then return an arbitrary element.
+	return weights.iterkeys().next()
+
+def softmax(x):
+	x = np.exp(x)
+	return x / x.sum()
+
 class Network:
 	total_parameters = 0
 
@@ -28,13 +43,15 @@ class Network:
 
 	def build_graph(self):
 		# Construct input/output placeholders.
-		self.input_ph = tf.placeholder(tf.float32, shape=[None, self.tower_sizes[0]], name="input_placeholder")
-		self.desired_policy_ph = tf.placeholder(tf.float32,	shape=[None, self.policy_sizes[-1]], name="desired_policy_placeholder")
-		self.desired_value_ph = tf.placeholder(tf.float32, shape=[None, self.value_sizes[-1]], name="desired_value_placeholder")
-		self.learning_rate_ph = tf.placeholder(tf.float32, shape=[], name="learning_rate")
-		self.policy_loss_weight_ph = tf.placeholder(tf.float32, shape=[], name="policy_loss_weight")
-		self.loss_multiplier_ph = tf.placeholder(tf.float32, shape=[None], name="loss_multiplier")
-		self.is_training_ph = tf.placeholder(tf.bool, shape=[], name="is_training")
+		self.input_ph = tf.placeholder(tf.float32, shape=[None, self.tower_sizes[0]], name="input_ph")
+#		self.desired_policy_ph = tf.placeholder(tf.float32,	shape=[None, self.policy_sizes[-1]], name="desired_policy_placeholder")
+#		self.desired_value_ph = tf.placeholder(tf.float32, shape=[None, self.value_sizes[-1]], name="desired_value_placeholder")
+		self.selected_action_ph = tf.placeholder(tf.float32, shape=[None, self.policy_sizes[-1]], name="selected_action_ph")
+		self.learning_rate_ph = tf.placeholder(tf.float32, shape=[], name="learning_rate_ph")
+		self.policy_loss_weight_ph = tf.placeholder(tf.float32, shape=[], name="policy_loss_weight_ph")
+		self.value_loss_weight_ph = tf.placeholder(tf.float32, shape=[], name="value_loss_weight_ph")
+#		self.loss_multiplier_ph = tf.placeholder(tf.float32, shape=[None], name="loss_multiplier_ph")
+#		self.is_training_ph = tf.placeholder(tf.bool, shape=[], name="is_training_ph")
 
 		# Begin constructing the data flow.
 		self.parameters = []
@@ -48,26 +65,42 @@ class Network:
 
 	def build_training(self):
 		# Make head losses.
-		self.policy_loss = self.policy_loss_weight_ph * tf.reduce_mean(
-			self.loss_multiplier_ph * tf.reduce_mean(
-				tf.square(self.desired_policy_ph - self.policy_output),
-				axis=1,
-			),
-		)
-		self.value_loss = tf.reduce_mean(tf.square(self.desired_value_ph - self.value_output))
+#		self.policy_loss = self.policy_loss_weight_ph * tf.reduce_mean(
+#			self.loss_multiplier_ph * tf.reduce_mean(
+#				tf.square(self.desired_policy_ph - self.policy_output),
+#				axis=1,
+#			),
+#		)
+#		self.value_loss = tf.reduce_mean(tf.square(self.desired_value_ph - self.value_output))
 		# Make regularization loss.
-		regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
-		reg_variables = tf.trainable_variables(scope=self.scope_name)
-		self.regularization_term = tf.contrib.layers.apply_regularization(regularizer, reg_variables)
+#		regularizer = tf.contrib.layers.l2_regularizer(scale=0.0001)
+#		reg_variables = tf.trainable_variables(scope=self.scope_name)
+#		self.regularization_term = tf.contrib.layers.apply_regularization(regularizer, reg_variables)
 		# Loss is the sum of these three.
 		# We throw in an aribtrary weight on the policy loss, to scale it relative to the value loss.
-		self.loss = self.policy_loss + self.value_loss + self.regularization_term
+#		self.loss = self.policy_loss + self.value_loss + self.regularization_term
 
-		# Associate batch normalization with training.
-		update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope_name)
-		with tf.control_dependencies(update_ops):
-			self.train_step = tf.train.MomentumOptimizer(
-				learning_rate=self.learning_rate_ph, momentum=0.9).minimize(self.loss)
+		# For a normal distribution the log probability is simply the squared error, scaled appropriately.
+		# Technically, we have a different noise distribution here, but we ignore that.
+		# XXX: Should I do the right thing, and make this variance match the real selected variance?
+		self.policy_loss = tf.reduce_mean(tf.squared_difference(self.policy_output, self.selected_action_ph))
+
+		# Insane "loss" that gives the right gradient for actor-critic.
+		self.value_loss = tf.reduce_mean(self.value_output)
+
+		self.loss = \
+			self.policy_loss_weight_ph * self.policy_loss + \
+			self.value_loss_weight_ph * self.value_loss
+
+		self.train_step = tf.train.GradientDescentOptimizer(
+			learning_rate=self.learning_rate_ph,
+		).minimize(self.loss)
+
+#		# Associate batch normalization with training.
+#		update_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS, scope=self.scope_name)
+#		with tf.control_dependencies(update_ops):
+#			self.train_step = tf.train.MomentumOptimizer(
+#				learning_rate=self.learning_rate_ph, momentum=0.9).minimize(self.loss)
 
 	def new_weight_variable(self, shape):
 		self.total_parameters += np.product(shape)
